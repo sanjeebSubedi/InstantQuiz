@@ -1,3 +1,6 @@
+import re
+from urllib.parse import quote
+
 import requests
 
 from backend.core.config import config
@@ -6,6 +9,16 @@ from backend.sources.wikipedia.models import SearchResult, WikipediaPage
 
 class WikipediaClient:
     BASE_URL = "https://en.wikipedia.org/w/api.php"
+    BOILERPLATE_SECTIONS = {
+        "see also",
+        "references",
+        "external links",
+        "further reading",
+        "notes",
+        "citations",
+        "bibliography",
+        "sources",
+    }
     headers = {"User-Agent": f"QuizApp/0.1 ({config.EMAIL})"}
 
     def search(self, query: str, limit: int = 5) -> list[SearchResult]:
@@ -38,6 +51,8 @@ class WikipediaClient:
             "titles": title,
             "explaintext": True,
             "format": "json",
+            "exsectionformat": "wiki",
+            "redirects": 1,
         }
 
         response = requests.get(self.BASE_URL, headers=self.headers, params=params)
@@ -52,6 +67,67 @@ class WikipediaClient:
             url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
             content=page.get("extract", ""),
         )
+
+    def resolve_topic_to_article(self, topic):
+        results = self.search(topic, limit=3)
+        if not results:
+            return None
+        top = results[0]
+        content = self.get_page(top.title)
+        return {"title": top.title, "content": content.content}
+
+    def parse_sections(self, full_text):
+        heading_pattern = re.compile(r"^(=+)\s*(.*?)\s*=+$")
+        lines = full_text.split("\n")
+
+        raw_sections = []
+        current = {"title": None, "level": 2, "text_lines": []}
+
+        for line in lines:
+            match = heading_pattern.match(line.strip())
+            if match:
+                raw_sections.append(current)
+                level = len(match.group(1))
+                current = {
+                    "title": match.group(2).strip(),
+                    "level": level,
+                    "text_lines": [],
+                }
+            else:
+                current["text_lines"].append(line)
+        raw_sections.append(current)
+
+        stack = []
+        sections = []
+        for s in raw_sections:
+            title = s["title"] or "Introduction"
+            if title.lower() in self.BOILERPLATE_SECTIONS:
+                continue
+
+            while stack and stack[-1][0] >= s["level"]:
+                stack.pop()
+            stack.append((s["level"], title))
+
+            text = "\n".join(l for l in s["text_lines"] if l.strip())
+            if not text:
+                continue
+
+            sections.append(
+                {
+                    "title": title,  # leaf title — new
+                    "breadcrumb": " > ".join(t for _, t in stack),
+                    "text": text,
+                }
+            )
+
+        return sections
+
+    def get_section_url(self, article_title, section_title):
+        base = f"https://en.wikipedia.org/wiki/{quote(article_title.replace(' ', '_'))}"
+        if section_title == "Introduction":
+            return base  # intro has no heading, so no anchor to link to
+        anchor = quote(section_title.replace(" ", "_"))
+        return f"{base}#{anchor}"
 
     def get_page_by_id(self, page_id: int) -> WikipediaPage:
         pass
