@@ -1,5 +1,8 @@
+from google import genai
 from google.genai import types
 from qdrant_client.models import Distance, PointStruct, VectorParams
+
+from backend.core.config import config
 
 
 def get_embedding(client, text, emb_model="gemini-embedding-2"):
@@ -13,7 +16,7 @@ def get_embedding(client, text, emb_model="gemini-embedding-2"):
 
 
 def store_embeddings(qdrant_client, collection_name, data_to_embed):
-
+    gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
     qdrant_client.create_collection(
         collection_name=collection_name,
         vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
@@ -21,7 +24,7 @@ def store_embeddings(qdrant_client, collection_name, data_to_embed):
 
     pointstructs = []
     for i, data in enumerate(data_to_embed):
-        embedding = get_embedding(data["text"])
+        embedding = get_embedding(gemini_client, data["text"])
         pointstructs.append(
             PointStruct(
                 id=i,
