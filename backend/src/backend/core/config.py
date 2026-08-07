@@ -10,6 +10,7 @@ class Config(BaseSettings):
     EMAIL: str
     GEMINI_API_KEY: str
     QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_COLLECTION_PREFIX: str = "quiz_app"
     OPENROUTER_API_KEY: str
     DEFAULT_DIFFICULTY: str = "medium"
     DEFAULT_QUESTION_COUNT: int = 10

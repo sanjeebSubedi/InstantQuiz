@@ -1,4 +1,5 @@
 import logging
+import re
 from time import perf_counter
 
 from qdrant_client import QdrantClient
@@ -16,6 +17,10 @@ from backend.sources.wikipedia.client import WikipediaClient
 logger = logging.getLogger(__name__)
 
 
+def slugify_title(title):
+    return re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -28,14 +33,19 @@ def main():
 
     wikipedia_client = WikipediaClient()
     qdrant_client = QdrantClient(url=config.QDRANT_URL)
-    qdrant_collection_name = "Quiz-App-Dev-Collection"
 
     article = wikipedia_client.resolve_topic_to_article(topic)
     article_title = article.get("title", "")
     sections = wikipedia_client.parse_sections(article.get("content", ""))
 
     chunks = build_chunks(sections, article.get("title", ""))
-    store_embeddings(qdrant_client, qdrant_collection_name, chunks)
+    qdrant_collection_name = f"{config.QDRANT_COLLECTION_PREFIX}-{slugify_title(article_title)}"
+    if qdrant_client.collection_exists(qdrant_collection_name):
+        logger.info(
+            "Article already indexed; reusing collection '%s'", qdrant_collection_name
+        )
+    else:
+        store_embeddings(qdrant_client, qdrant_collection_name, chunks)
 
     outline = build_outline(chunks, article_title)
 

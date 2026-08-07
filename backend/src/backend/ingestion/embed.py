@@ -21,6 +21,10 @@ def get_embedding(client, text, emb_model="gemini-embedding-2"):
 
 
 def store_embeddings(qdrant_client, collection_name, data_to_embed):
+    if qdrant_client.collection_exists(collection_name):
+        logger.info("Collection '%s' already exists; skipping embed", collection_name)
+        return
+
     gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
     qdrant_client.create_collection(
         collection_name=collection_name,
