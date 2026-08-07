@@ -1,3 +1,4 @@
+import logging
 import re
 from urllib.parse import quote
 
@@ -5,6 +6,8 @@ import requests
 
 from backend.core.config import config
 from backend.sources.wikipedia.models import SearchResult, WikipediaPage
+
+logger = logging.getLogger(__name__)
 
 
 class WikipediaClient:
@@ -71,9 +74,11 @@ class WikipediaClient:
     def resolve_topic_to_article(self, topic):
         results = self.search(topic, limit=3)
         if not results:
+            logger.warning("No Wikipedia article resolved for topic '%s'", topic)
             return None
         top = results[0]
         content = self.get_page(top.title)
+        logger.info("Resolved topic '%s' -> article '%s'", topic, top.title)
         return {"title": top.title, "content": content.content}
 
     def parse_sections(self, full_text):
@@ -120,6 +125,7 @@ class WikipediaClient:
                 }
             )
 
+        logger.info("Parsed %d sections from article", len(sections))
         return sections
 
     def get_section_url(self, article_title, section_title):

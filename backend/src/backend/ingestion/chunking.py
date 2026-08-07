@@ -1,6 +1,9 @@
+import logging
 from urllib.parse import quote
 
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 encoder = tiktoken.get_encoding("cl100k_base")
 
@@ -35,6 +38,7 @@ def build_chunks(sections, article_title):
     if buffer is not None:
         chunks.extend(split_if_needed(buffer, article_title))
 
+    logger.info("Built %d chunks from %d sections", len(chunks), len(sections))
     return chunks
 
 

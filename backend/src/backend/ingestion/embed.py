@@ -1,8 +1,13 @@
+import logging
+from time import perf_counter
+
 from google import genai
 from google.genai import types
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from backend.core.config import config
+
+logger = logging.getLogger(__name__)
 
 
 def get_embedding(client, text, emb_model="gemini-embedding-2"):
@@ -22,6 +27,7 @@ def store_embeddings(qdrant_client, collection_name, data_to_embed):
         vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
     )
 
+    start = perf_counter()
     pointstructs = []
     for i, data in enumerate(data_to_embed):
         embedding = get_embedding(gemini_client, data["text"])
@@ -41,4 +47,10 @@ def store_embeddings(qdrant_client, collection_name, data_to_embed):
 
     qdrant_client.upsert(
         collection_name=collection_name, wait=True, points=pointstructs
+    )
+    logger.info(
+        "Embedded %d chunks into collection '%s' in %.2fs",
+        len(pointstructs),
+        collection_name,
+        perf_counter() - start,
     )

@@ -13,3 +13,8 @@ wheels/
 .python-version
 .agents/
 opencode.json
+
+# Runtime artifacts
+logs.txt
+quiz_outlines.db
+*.db
