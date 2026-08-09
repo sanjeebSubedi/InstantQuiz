@@ -18,3 +18,7 @@ opencode.json
 logs.txt
 quiz_outlines.db
 *.db
+
+# Node frontend
+frontend/node_modules/
+frontend/dist/
