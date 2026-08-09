@@ -82,11 +82,13 @@ export function sessionReducer(state = INITIAL_STATE, event) {
         wasFullyAnswered && hasQuestions && merged.questions.length > previousCount
           ? previousCount
           : state.currentIndex
-      const phase = isResolved(p.status, merged.answers, merged.questions.length)
-        ? 'finished'
-        : hasQuestions
-          ? 'playing'
-          : 'creating'
+      const phase = p.status === 'failed'
+        ? 'failed'
+        : isResolved(p.status, merged.answers, merged.questions.length)
+          ? 'finished'
+          : hasQuestions
+            ? 'playing'
+            : 'creating'
       return {
         ...merged,
         phase,

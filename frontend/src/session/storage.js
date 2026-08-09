@@ -10,6 +10,14 @@ export function saveSession(jobId, blob) {
   }
 }
 
+export function clearSession(jobId) {
+  try {
+    window.localStorage.removeItem(key(jobId))
+  } catch {
+    // Storage unavailable; nothing to clear.
+  }
+}
+
 export function loadSession(jobId) {
   try {
     const raw = window.localStorage.getItem(key(jobId))

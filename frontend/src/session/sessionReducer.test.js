@@ -28,13 +28,15 @@ describe('poll', () => {
     expect(state.status).toBe('running')
   })
 
-  it('records a failed job so it can be surfaced later', () => {
+  it('records a failed job and transitions out of the creating flow', () => {
     const state = sessionReducer(pending('Black holes'), {
       type: 'poll',
       payload: { job_id: 'abc123', topic: 'Black holes', status: 'failed', questions: [], error: 'no article found' },
     })
+    expect(state.phase).toBe('failed')
     expect(state.status).toBe('failed')
     expect(state.error).toBe('no article found')
+    expect(state.topic).toBe('Black holes')
   })
 })
 
@@ -271,6 +273,35 @@ describe('live merge while the job is running', () => {
     expect(state.status).toBe('completed')
     expect(state.phase).toBe('playing')
     expect(state.currentIndex).toBe(0)
+  })
+
+  it('surfaces a failed job the same way when it happens mid-play', () => {
+    let state = startPlay(3, 'running')
+    state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][0] })
+    state = sessionReducer(state, {
+      type: 'poll',
+      payload: {
+        job_id: 'abc123',
+        topic: 'Black holes',
+        status: 'failed',
+        questions: [aQuestion(0), aQuestion(1), aQuestion(2)],
+        error: 'generation failed',
+      },
+    })
+    expect(state.phase).toBe('failed')
+    expect(state.status).toBe('failed')
+    expect(state.error).toBe('generation failed')
+    expect(state.questions).toHaveLength(3)
+  })
+
+  it('ignores further polls and player input once a job has failed', () => {
+    let state = startPlay(3, 'running')
+    state = pollWith(state, 'failed', [])
+    const failed = state
+    expect(sessionReducer(failed, { type: 'answer', index: 0, option: 'Nope' })).toBe(failed)
+    expect(sessionReducer(failed, { type: 'next' })).toBe(failed)
+    expect(sessionReducer(failed, { type: 'prev' })).toBe(failed)
+    expect(sessionReducer(failed, { type: 'poll', payload: { job_id: 'abc123', topic: 'Black holes', status: 'running', questions: [], error: null } })).toBe(failed)
   })
 })
 

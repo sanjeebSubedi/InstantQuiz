@@ -1,8 +1,8 @@
 import { useEffect, useReducer, useState } from 'react'
 import { createQuiz, getQuiz } from './api.js'
 import { INITIAL_STATE, allAnswered, sessionReducer } from './session/sessionReducer.js'
-import { readJobId, writeJobId } from './session/url.js'
-import { loadSession, saveSession } from './session/storage.js'
+import { clearJobId, readJobId, writeJobId } from './session/url.js'
+import { clearSession, loadSession, saveSession } from './session/storage.js'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -112,10 +112,7 @@ export default function App() {
     }
   }, [state.phase, state.jobId, state.status])
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    const topic = topicInput.trim()
-    if (!topic || state.phase !== 'idle') return
+  async function startJob(topic) {
     dispatch({ type: 'create', topic })
     try {
       const { job_id } = await createQuiz(topic)
@@ -127,6 +124,31 @@ export default function App() {
     }
   }
 
+  function handleSubmit(e) {
+    e.preventDefault()
+    const topic = topicInput.trim()
+    if (!topic || state.phase !== 'idle') return
+    startJob(topic)
+  }
+
+  function abandonSession() {
+    clearJobId()
+    if (state.jobId) clearSession(state.jobId)
+  }
+
+  function retrySameTopic() {
+    if (state.phase !== 'failed' || !state.topic) return
+    abandonSession()
+    startJob(state.topic)
+  }
+
+  function newTopic() {
+    if (state.phase !== 'failed') return
+    abandonSession()
+    setTopicInput('')
+    dispatch({ type: 'reset' })
+  }
+
   if (state.phase === 'pending' || state.phase === 'creating') {
     return (
       <main className="creating">
@@ -135,6 +157,24 @@ export default function App() {
         <p className="hint">
           We are generating your questions. This should only take a few moments.
         </p>
+      </main>
+    )
+  }
+
+  if (state.phase === 'failed') {
+    return (
+      <main className="failed">
+        <h1>Quiz failed</h1>
+        {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
+        <p className="error">{state.error || 'Something went wrong while generating your quiz.'}</p>
+        <div className="failed-actions">
+          <button type="button" onClick={retrySameTopic}>
+            Retry same topic
+          </button>
+          <button type="button" className="secondary" onClick={newTopic}>
+            New topic
+          </button>
+        </div>
       </main>
     )
   }
