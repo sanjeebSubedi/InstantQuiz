@@ -23,6 +23,18 @@ body {
   color: var(--text);
 }
 
+.polygon-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.polygon-background__canvas {
+  display: block;
+}
+
 main {
   max-width: 480px;
   margin: 12vh auto 0;
