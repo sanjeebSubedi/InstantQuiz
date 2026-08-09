@@ -205,3 +205,116 @@ describe('progress over the known set', () => {
     expect(state.questions).toHaveLength(3)
   })
 })
+
+describe('live merge while the job is running', () => {
+  const pollWith = (state, status, questions) =>
+    sessionReducer(state, {
+      type: 'poll',
+      payload: {
+        job_id: 'abc123',
+        topic: 'Black holes',
+        status,
+        questions,
+        error: null,
+      },
+    })
+
+  it('appends newly arrived questions at their arrival index without disturbing answered ones', () => {
+    let state = startPlay(3, 'running')
+    state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][0] })
+    state = sessionReducer(state, { type: 'next' })
+    const orderBefore = state.optionOrder[0]
+    const answerBefore = state.answers[0]
+    state = pollWith(
+      state,
+      'running',
+      [aQuestion(0), aQuestion(1), aQuestion(2), aQuestion(3), aQuestion(4)],
+    )
+    expect(state.questions).toHaveLength(5)
+    expect(state.answers[0]).toBe(answerBefore)
+    expect(state.optionOrder[0]).toEqual(orderBefore)
+    expect(state.currentIndex).toBe(1)
+  })
+
+  it('does not advance the player when they are still mid-set', () => {
+    let state = startPlay(3, 'running')
+    state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][0] })
+    state = sessionReducer(state, { type: 'next' })
+    state = pollWith(
+      state,
+      'running',
+      [aQuestion(0), aQuestion(1), aQuestion(2), aQuestion(3)],
+    )
+    expect(state.questions).toHaveLength(4)
+    expect(state.currentIndex).toBe(1)
+  })
+
+  it('answers can keep being recorded against their stable arrival index after growth', () => {
+    let state = startPlay(3, 'running')
+    for (const i of [0, 1, 2]) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    state = pollWith(
+      state,
+      'running',
+      [aQuestion(0), aQuestion(1), aQuestion(2), aQuestion(3), aQuestion(4)],
+    )
+    expect(state.questions).toHaveLength(5)
+    expect(state.currentIndex).toBe(3)
+    state = sessionReducer(state, { type: 'answer', index: 3, option: state.optionOrder[3][0] })
+    expect(state.answers[3]).toBe(state.optionOrder[3][0])
+  })
+
+  it('records a completed status while the quiz is still being played', () => {
+    let state = startPlay(3, 'running')
+    state = pollWith(state, 'completed', [aQuestion(0), aQuestion(1), aQuestion(2)])
+    expect(state.status).toBe('completed')
+    expect(state.phase).toBe('playing')
+    expect(state.currentIndex).toBe(0)
+  })
+})
+
+describe('quiz resolution', () => {
+  it('stays playing while a running job has everything answered', () => {
+    let state = startPlay(2, 'running')
+    for (const i of [0, 1]) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    expect(state.phase).toBe('playing')
+  })
+
+  it('resolves once every known question of a completed job is answered', () => {
+    let state = startPlay(3, 'completed')
+    for (const i of [0, 1, 2]) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    expect(state.phase).toBe('finished')
+  })
+
+  it('resolves when a poll delivers a completed job with everything already answered', () => {
+    let state = startPlay(2, 'running')
+    for (const i of [0, 1]) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    state = sessionReducer(state, {
+      type: 'poll',
+      payload: {
+        job_id: 'abc123',
+        topic: 'Black holes',
+        status: 'completed',
+        questions: [aQuestion(0), aQuestion(1)],
+        error: null,
+      },
+    })
+    expect(state.phase).toBe('finished')
+  })
+
+  it('answers cannot change once the quiz has resolved', () => {
+    let state = startPlay(2, 'completed')
+    state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][0] })
+    state = sessionReducer(state, { type: 'answer', index: 1, option: state.optionOrder[1][0] })
+    const resolved = state
+    state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][1] })
+    expect(state).toBe(resolved)
+  })
+})

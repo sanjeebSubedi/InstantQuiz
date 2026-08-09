@@ -48,6 +48,18 @@ function withShuffledArrivals(state, incoming) {
   return { ...state, questions, optionOrder }
 }
 
+export function allAnswered(answers, count) {
+  if (count === 0) return false
+  for (let i = 0; i < count; i += 1) {
+    if (answers[i] === undefined) return false
+  }
+  return true
+}
+
+function isResolved(status, answers, count) {
+  return status === 'completed' && allAnswered(answers, count)
+}
+
 export function sessionReducer(state = INITIAL_STATE, event) {
   switch (event.type) {
     case 'create': {
@@ -62,11 +74,23 @@ export function sessionReducer(state = INITIAL_STATE, event) {
       if (state.phase !== 'pending' && state.phase !== 'creating' && state.phase !== 'playing') return state
       const p = event.payload
       const incoming = p.questions ?? []
+      const previousCount = state.questions.length
+      const wasFullyAnswered = allAnswered(state.answers, previousCount)
       const merged = withShuffledArrivals(state, incoming)
       const hasQuestions = merged.questions.length > 0
+      const currentIndex =
+        wasFullyAnswered && hasQuestions && merged.questions.length > previousCount
+          ? previousCount
+          : state.currentIndex
+      const phase = isResolved(p.status, merged.answers, merged.questions.length)
+        ? 'finished'
+        : hasQuestions
+          ? 'playing'
+          : 'creating'
       return {
         ...merged,
-        phase: hasQuestions ? 'playing' : 'creating',
+        phase,
+        currentIndex,
         jobId: p.job_id,
         topic: p.topic ?? state.topic,
         status: p.status,
@@ -77,7 +101,9 @@ export function sessionReducer(state = INITIAL_STATE, event) {
       if (state.phase !== 'playing') return state
       const { index, option } = event
       if (!Number.isInteger(index) || index < 0 || index >= state.questions.length) return state
-      return { ...state, answers: { ...state.answers, [index]: option } }
+      const answers = { ...state.answers, [index]: option }
+      const phase = isResolved(state.status, answers, state.questions.length) ? 'finished' : state.phase
+      return { ...state, answers, phase }
     }
     case 'next': {
       if (state.phase !== 'playing') return state

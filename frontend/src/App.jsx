@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from 'react'
 import { createQuiz, getQuiz } from './api.js'
-import { INITIAL_STATE, sessionReducer } from './session/sessionReducer.js'
+import { INITIAL_STATE, allAnswered, sessionReducer } from './session/sessionReducer.js'
 import { readJobId, writeJobId } from './session/url.js'
 import { loadSession, saveSession } from './session/storage.js'
 
@@ -12,9 +12,30 @@ function Playing({ state, dispatch }) {
   const selected = state.answers[state.currentIndex]
   const total = state.questions.length
   const answered = Object.keys(state.answers).length
+  const waitingForMore = state.status === 'running' && allAnswered(state.answers, total)
 
   function answer(option) {
     dispatch({ type: 'answer', index: state.currentIndex, option })
+  }
+
+  if (waitingForMore) {
+    return (
+      <main className="playing">
+        <header className="playing-header">
+          <p className="progress">
+            Answered {answered}/{total}
+          </p>
+        </header>
+        <section className="generating">
+          <h2>Generating more questions&hellip;</h2>
+          <p>
+            You have answered everything available so far. Keep this page open
+            while the quiz finishes - new questions will appear here as they are
+            generated.
+          </p>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -72,7 +93,8 @@ export default function App() {
   const [topicInput, setTopicInput] = useState('')
 
   useEffect(() => {
-    if (state.phase !== 'creating' || !state.jobId) return
+    if (!state.jobId || state.status !== 'running') return
+    if (state.phase !== 'creating' && state.phase !== 'playing') return
     let stopped = false
     const tick = async () => {
       try {
@@ -88,7 +110,7 @@ export default function App() {
       stopped = true
       clearInterval(id)
     }
-  }, [state.phase, state.jobId])
+  }, [state.phase, state.jobId, state.status])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -112,6 +134,18 @@ export default function App() {
         {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
         <p className="hint">
           We are generating your questions. This should only take a few moments.
+        </p>
+      </main>
+    )
+  }
+
+  if (state.phase === 'finished') {
+    return (
+      <main className="finished">
+        <h1>Quiz complete</h1>
+        {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
+        <p className="hint">
+          You answered {Object.keys(state.answers).length} of {state.questions.length} questions.
         </p>
       </main>
     )

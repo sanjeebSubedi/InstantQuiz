@@ -90,6 +90,23 @@ button:disabled {
   color: var(--muted);
 }
 
+.finished .topic,
+.finished .hint {
+  color: var(--muted);
+}
+
+.generating {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--muted);
+}
+
+.generating h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  color: var(--text);
+}
+
 .playing-header {
   display: flex;
   justify-content: flex-end;
