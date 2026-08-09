@@ -56,6 +56,16 @@ export function allAnswered(answers, count) {
   return true
 }
 
+export function score(state) {
+  const total = state.questions.length
+  let correct = 0
+  for (let i = 0; i < total; i += 1) {
+    if (state.answers[i] === state.questions[i].correct_answer) correct += 1
+  }
+  const percent = total === 0 ? 0 : Math.round((correct / total) * 100)
+  return { correct, total, percent }
+}
+
 function isResolved(status, answers, count) {
   return status === 'completed' && allAnswered(answers, count)
 }

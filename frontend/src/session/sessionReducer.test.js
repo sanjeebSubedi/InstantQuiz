@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { INITIAL_STATE, sessionReducer } from './sessionReducer.js'
+import { INITIAL_STATE, score, sessionReducer } from './sessionReducer.js'
 
 describe('create', () => {
   it('transitions into a pending job state and holds the topic', () => {
@@ -347,5 +347,43 @@ describe('quiz resolution', () => {
     const resolved = state
     state = sessionReducer(state, { type: 'answer', index: 0, option: state.optionOrder[0][1] })
     expect(state).toBe(resolved)
+  })
+})
+
+describe('score', () => {
+  function finished(state, targets) {
+    for (let i = 0; i < state.questions.length; i += 1) {
+      state = sessionReducer(state, {
+        type: 'answer',
+        index: i,
+        option: targets[i],
+      })
+    }
+    return state
+  }
+
+  it('scores all correct when every answer matches the correct answer', () => {
+    let state = startPlay(3, 'completed')
+    state = finished(state, state.questions.map((q) => q.correct_answer))
+    expect(score(state)).toEqual({ correct: 3, total: 3, percent: 100 })
+  })
+
+  it('scores zero when no answer matches the correct answer', () => {
+    let state = startPlay(3, 'completed')
+    const allWrong = state.questions.map((q) => q.options.find((o) => o !== q.correct_answer))
+    state = finished(state, allWrong)
+    expect(score(state)).toEqual({ correct: 0, total: 3, percent: 0 })
+  })
+
+  it('computes a rounded percentage for partial credit', () => {
+    let state = startPlay(3, 'completed')
+    const correct = state.questions.map((q) => q.correct_answer)
+    correct[1] = state.optionOrder[1].find((o) => o !== correct[1])
+    state = finished(state, correct)
+    expect(score(state)).toEqual({ correct: 2, total: 3, percent: 67 })
+  })
+
+  it('returns a zeroed result on a session with no questions', () => {
+    expect(score(INITIAL_STATE)).toEqual({ correct: 0, total: 0, percent: 0 })
   })
 })
