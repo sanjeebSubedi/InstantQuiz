@@ -41,11 +41,74 @@ describe('poll', () => {
 })
 
 describe('restore', () => {
-  it('resumes a stored job into the creating state', () => {
-    const state = sessionReducer(INITIAL_STATE, { type: 'restore', jobId: 'abc123', topic: 'Formula One' })
+  it('restores an in-progress session exactly as it was left', () => {
+    const blob = {
+      phase: 'playing',
+      topic: 'Black holes',
+      jobId: 'abc123',
+      status: 'running',
+      questions: [aQuestion(0), aQuestion(1)],
+      optionOrder: { 0: ['Zeta', 'Alpha', 'Beta', 'Gamma'], 1: ['Omega', 'Alpha', 'Beta', 'Gamma'] },
+      answers: { 0: 'Zeta' },
+      currentIndex: 1,
+      error: null,
+    }
+    const state = sessionReducer(INITIAL_STATE, { type: 'restore', jobId: 'abc123', blob })
+    expect(state.phase).toBe('playing')
+    expect(state.currentIndex).toBe(1)
+    expect(state.answers).toEqual({ 0: 'Zeta' })
+    expect(state.optionOrder).toEqual(blob.optionOrder)
+    expect(state.questions).toHaveLength(2)
+  })
+
+  it('reopens a finished session straight onto the results screen', () => {
+    let state = startPlay(2, 'completed')
+    for (let i = 0; i < 2; i += 1) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    const restored = sessionReducer(INITIAL_STATE, { type: 'restore', jobId: 'abc123', blob: state })
+    expect(restored.phase).toBe('finished')
+    expect(restored.answers).toEqual(state.answers)
+    expect(restored.questions).toHaveLength(2)
+  })
+
+  it('falls back to a fresh session when nothing is stored for the job', () => {
+    const state = sessionReducer(INITIAL_STATE, { type: 'restore', jobId: 'abc123', blob: null })
     expect(state.phase).toBe('creating')
     expect(state.jobId).toBe('abc123')
-    expect(state.topic).toBe('Formula One')
+    expect(state.topic).toBeNull()
+  })
+
+  it('does not pick up anything stored under another job', () => {
+    const foreign = {
+      ...INITIAL_STATE,
+      jobId: 'other-job',
+      phase: 'playing',
+      topic: 'Formula One',
+      questions: [aQuestion(0)],
+      answers: { 0: 'Alpha 0' },
+    }
+    const state = sessionReducer(INITIAL_STATE, {
+      type: 'restore',
+      jobId: 'abc123',
+      blob: foreign,
+    })
+    expect(state.phase).toBe('creating')
+    expect(state.jobId).toBe('abc123')
+    expect(state.topic).toBeNull()
+    expect(state.questions).toEqual([])
+    expect(state.answers).toEqual({})
+  })
+
+  it('does not resume a session recorded before persistence was added', () => {
+    const state = sessionReducer(INITIAL_STATE, {
+      type: 'restore',
+      jobId: 'abc123',
+      blob: { jobId: 'abc123', topic: 'Formula One' },
+    })
+    expect(state.phase).toBe('creating')
+    expect(state.jobId).toBe('abc123')
+    expect(state.topic).toBeNull()
   })
 
   it('ignores restores without a job id', () => {

@@ -134,8 +134,7 @@ function Results({ state, onReplay, onNewTopic }) {
 function init() {
   const jobId = readJobId()
   if (!jobId) return INITIAL_STATE
-  const blob = loadSession(jobId)
-  return sessionReducer(INITIAL_STATE, { type: 'restore', jobId, topic: blob?.topic })
+  return sessionReducer(INITIAL_STATE, { type: 'restore', jobId, blob: loadSession(jobId) })
 }
 
 export default function App() {
@@ -162,12 +161,16 @@ export default function App() {
     }
   }, [state.phase, state.jobId, state.status])
 
+  useEffect(() => {
+    if (!state.jobId || state.phase === 'idle') return
+    saveSession(state.jobId, state)
+  }, [state])
+
   async function startJob(topic) {
     dispatch({ type: 'create', topic })
     try {
       const { job_id } = await createQuiz(topic)
       writeJobId(job_id)
-      saveSession(job_id, { jobId: job_id, topic })
       dispatch({ type: 'poll', payload: { job_id, status: 'running' } })
     } catch {
       dispatch({ type: 'reset' })

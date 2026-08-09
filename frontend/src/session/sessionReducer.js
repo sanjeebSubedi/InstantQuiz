@@ -77,9 +77,14 @@ export function sessionReducer(state = INITIAL_STATE, event) {
       if (!topic) return state
       return { ...INITIAL_STATE, phase: 'pending', topic, status: 'running' }
     }
-    case 'restore':
+    case 'restore': {
       if (!event.jobId) return state
-      return createSession(event.jobId, event.topic)
+      const blob = event.blob
+      if (blob && blob.jobId === event.jobId && blob.phase && blob.phase !== 'idle') {
+        return { ...INITIAL_STATE, ...blob }
+      }
+      return createSession(event.jobId, null)
+    }
     case 'poll': {
       if (state.phase !== 'pending' && state.phase !== 'creating' && state.phase !== 'playing') return state
       const p = event.payload
