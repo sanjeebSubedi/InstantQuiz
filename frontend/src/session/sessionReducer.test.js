@@ -350,6 +350,32 @@ describe('quiz resolution', () => {
   })
 })
 
+describe('replay and new topic', () => {
+  function finishedQuiz(questionCount) {
+    let state = startPlay(questionCount, 'completed')
+    for (let i = 0; i < questionCount; i += 1) {
+      state = sessionReducer(state, { type: 'answer', index: i, option: state.optionOrder[i][0] })
+    }
+    expect(state.phase).toBe('finished')
+    return state
+  }
+
+  it('play again creates a fresh session for the same topic', () => {
+    const replayed = sessionReducer(finishedQuiz(2), { type: 'create', topic: 'Black holes' })
+    expect(replayed.phase).toBe('pending')
+    expect(replayed.topic).toBe('Black holes')
+    expect(replayed.jobId).toBeNull()
+    expect(replayed.questions).toEqual([])
+    expect(replayed.answers).toEqual({})
+    expect(replayed.optionOrder).toEqual({})
+    expect(replayed.currentIndex).toBe(0)
+  })
+
+  it('new topic returns to the landing state', () => {
+    expect(sessionReducer(finishedQuiz(2), { type: 'reset' })).toBe(INITIAL_STATE)
+  })
+})
+
 describe('score', () => {
   function finished(state, targets) {
     for (let i = 0; i < state.questions.length; i += 1) {

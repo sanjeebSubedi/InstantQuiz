@@ -105,7 +105,7 @@ function ReviewRow({ question, answer, index }) {
   )
 }
 
-function Results({ state }) {
+function Results({ state, onReplay, onNewTopic }) {
   const { correct, total, percent } = score(state)
   return (
     <main className="results">
@@ -119,6 +119,14 @@ function Results({ state }) {
           <ReviewRow key={index} question={question} answer={state.answers[index]} index={index} />
         ))}
       </ol>
+      <div className="results-actions">
+        <button type="button" onClick={onReplay}>
+          Play again
+        </button>
+        <button type="button" className="secondary" onClick={onNewTopic}>
+          New topic
+        </button>
+      </div>
     </main>
   )
 }
@@ -178,14 +186,13 @@ export default function App() {
     if (state.jobId) clearSession(state.jobId)
   }
 
-  function retrySameTopic() {
-    if (state.phase !== 'failed' || !state.topic) return
+  function replaySameTopic() {
+    if (!state.topic) return
     abandonSession()
     startJob(state.topic)
   }
 
   function newTopic() {
-    if (state.phase !== 'failed') return
     abandonSession()
     setTopicInput('')
     dispatch({ type: 'reset' })
@@ -210,7 +217,7 @@ export default function App() {
         {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
         <p className="error">{state.error || 'Something went wrong while generating your quiz.'}</p>
         <div className="failed-actions">
-          <button type="button" onClick={retrySameTopic}>
+          <button type="button" onClick={replaySameTopic}>
             Retry same topic
           </button>
           <button type="button" className="secondary" onClick={newTopic}>
@@ -222,7 +229,7 @@ export default function App() {
   }
 
   if (state.phase === 'finished') {
-    return <Results state={state} />
+    return <Results state={state} onReplay={replaySameTopic} onNewTopic={newTopic} />
   }
 
   if (state.phase === 'playing') {

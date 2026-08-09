@@ -88,6 +88,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface);
+}
+
 .creating .topic,
 .creating .hint {
   color: var(--muted);
@@ -184,6 +196,10 @@ button:disabled {
   text-decoration: underline;
 }
 
+.results .results-actions {
+  margin-top: 1.5rem;
+}
+
 .failed .topic {
   color: var(--muted);
 }
@@ -196,18 +212,6 @@ button:disabled {
   border: 1px solid var(--danger-border);
   border-radius: 6px;
   line-height: 1.4;
-}
-
-.failed-actions .secondary {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.failed-actions .secondary:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--surface);
 }
 
 .generating {
@@ -274,16 +278,4 @@ button:disabled {
 .controls button {
   flex: 1;
   margin-top: 0;
-}
-
-.controls .secondary {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.controls .secondary:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--surface);
 }
