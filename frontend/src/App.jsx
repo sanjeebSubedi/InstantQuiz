@@ -6,6 +6,60 @@ import { loadSession, saveSession } from './session/storage.js'
 
 const POLL_INTERVAL_MS = 2000
 
+function Playing({ state, dispatch }) {
+  const question = state.questions[state.currentIndex]
+  const options = state.optionOrder[state.currentIndex]
+  const selected = state.answers[state.currentIndex]
+  const total = state.questions.length
+  const answered = Object.keys(state.answers).length
+
+  function answer(option) {
+    dispatch({ type: 'answer', index: state.currentIndex, option })
+  }
+
+  return (
+    <main className="playing">
+      <header className="playing-header">
+        <p className="progress">
+          Answered {answered}/{total}
+        </p>
+      </header>
+      <h1 className="question-text">{question.question}</h1>
+      <div className="options" role="radiogroup" aria-label="Options">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={option === selected}
+            className={option === selected ? 'option selected' : 'option'}
+            onClick={() => answer(option)}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+      <footer className="controls">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => dispatch({ type: 'prev' })}
+          disabled={state.currentIndex === 0}
+        >
+          Prev
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'next' })}
+          disabled={selected === undefined || state.currentIndex >= total - 1}
+        >
+          Next
+        </button>
+      </footer>
+    </main>
+  )
+}
+
 function init() {
   const jobId = readJobId()
   if (!jobId) return INITIAL_STATE
@@ -61,6 +115,10 @@ export default function App() {
         </p>
       </main>
     )
+  }
+
+  if (state.phase === 'playing') {
+    return <Playing state={state} dispatch={dispatch} />
   }
 
   return (
