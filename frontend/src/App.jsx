@@ -1,204 +1,22 @@
-import { useEffect, useReducer, useState } from 'react'
-import { createQuiz, getQuiz } from './api.js'
-import { INITIAL_STATE, allAnswered, score, sessionReducer } from './session/sessionReducer.js'
-import { clearJobId, readJobId, writeJobId } from './session/url.js'
-import { clearSession, loadSession, saveSession } from './session/storage.js'
-
-const POLL_INTERVAL_MS = 2000
-
-function Playing({ state, dispatch }) {
-  const question = state.questions[state.currentIndex]
-  const options = state.optionOrder[state.currentIndex]
-  const selected = state.answers[state.currentIndex]
-  const total = state.questions.length
-  const answered = Object.keys(state.answers).length
-  const waitingForMore = state.status === 'running' && allAnswered(state.answers, total)
-
-  function answer(option) {
-    dispatch({ type: 'answer', index: state.currentIndex, option })
-  }
-
-  if (waitingForMore) {
-    return (
-      <main className="playing">
-        <header className="playing-header">
-          <p className="progress">
-            Answered {answered}/{total}
-          </p>
-        </header>
-        <section className="generating">
-          <h2>Generating more questions&hellip;</h2>
-          <p>
-            You have answered everything available so far. Keep this page open
-            while the quiz finishes - new questions will appear here as they are
-            generated.
-          </p>
-        </section>
-      </main>
-    )
-  }
-
-  return (
-    <main className="playing">
-      <header className="playing-header">
-        <p className="progress">
-          Answered {answered}/{total}
-        </p>
-      </header>
-      <h1 className="question-text">{question.question}</h1>
-      <div className="options" role="radiogroup" aria-label="Options">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={option === selected}
-            className={option === selected ? 'option selected' : 'option'}
-            onClick={() => answer(option)}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-      <footer className="controls">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => dispatch({ type: 'prev' })}
-          disabled={state.currentIndex === 0}
-        >
-          Prev
-        </button>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'next' })}
-          disabled={selected === undefined || state.currentIndex >= total - 1}
-        >
-          Next
-        </button>
-      </footer>
-    </main>
-  )
-}
-
-function ReviewRow({ question, answer, index }) {
-  const correct = answer === question.correct_answer
-  return (
-    <li className="review-row">
-      <div className="review-head">
-        <span className="review-index">Q{index + 1}</span>
-        <span className={`badge ${correct ? 'badge-correct' : 'badge-incorrect'}`}>
-          {correct ? 'Correct' : 'Incorrect'}
-        </span>
-      </div>
-      <p className="review-question">{question.question}</p>
-      <dl className="review-answers">
-        <dt>Your answer</dt>
-        <dd className={correct ? '' : 'wrong'}>{answer}</dd>
-        <dt>Correct answer</dt>
-        <dd className="right">{question.correct_answer}</dd>
-      </dl>
-      <a className="source-link" href={question.source_url} target="_blank" rel="noreferrer">
-        Source article
-      </a>
-    </li>
-  )
-}
-
-function Results({ state, onReplay, onNewTopic }) {
-  const { correct, total, percent } = score(state)
-  return (
-    <main className="results">
-      <h1>Quiz complete</h1>
-      {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
-      <p className="score">
-        {correct}/{total} &middot; {percent}%
-      </p>
-      <ol className="review-list">
-        {state.questions.map((question, index) => (
-          <ReviewRow key={index} question={question} answer={state.answers[index]} index={index} />
-        ))}
-      </ol>
-      <div className="results-actions">
-        <button type="button" onClick={onReplay}>
-          Play again
-        </button>
-        <button type="button" className="secondary" onClick={onNewTopic}>
-          New topic
-        </button>
-      </div>
-    </main>
-  )
-}
-
-function init() {
-  const jobId = readJobId()
-  if (!jobId) return INITIAL_STATE
-  return sessionReducer(INITIAL_STATE, { type: 'restore', jobId, blob: loadSession(jobId) })
-}
+import { useState } from 'react'
+import { useSession } from './session/useSession.js'
+import { Playing } from './views/Playing.jsx'
+import { Results } from './views/Results.jsx'
 
 export default function App() {
-  const [state, dispatch] = useReducer(sessionReducer, null, init)
+  const { state, actions } = useSession()
   const [topicInput, setTopicInput] = useState('')
-
-  useEffect(() => {
-    if (!state.jobId || state.status !== 'running') return
-    if (state.phase !== 'creating' && state.phase !== 'playing') return
-    let stopped = false
-    const tick = async () => {
-      try {
-        const payload = await getQuiz(state.jobId)
-        if (!stopped) dispatch({ type: 'poll', payload })
-      } catch {
-        // Transient poll failures are retried on the next tick.
-      }
-    }
-    tick()
-    const id = setInterval(tick, POLL_INTERVAL_MS)
-    return () => {
-      stopped = true
-      clearInterval(id)
-    }
-  }, [state.phase, state.jobId, state.status])
-
-  useEffect(() => {
-    if (!state.jobId || state.phase === 'idle') return
-    saveSession(state.jobId, state)
-  }, [state])
-
-  async function startJob(topic) {
-    dispatch({ type: 'create', topic })
-    try {
-      const { job_id } = await createQuiz(topic)
-      writeJobId(job_id)
-      dispatch({ type: 'poll', payload: { job_id, status: 'running' } })
-    } catch {
-      dispatch({ type: 'reset' })
-    }
-  }
 
   function handleSubmit(e) {
     e.preventDefault()
     const topic = topicInput.trim()
     if (!topic || state.phase !== 'idle') return
-    startJob(topic)
+    actions.start(topic)
   }
 
-  function abandonSession() {
-    clearJobId()
-    if (state.jobId) clearSession(state.jobId)
-  }
-
-  function replaySameTopic() {
-    if (!state.topic) return
-    abandonSession()
-    startJob(state.topic)
-  }
-
-  function newTopic() {
-    abandonSession()
+  function handleNewTopic() {
     setTopicInput('')
-    dispatch({ type: 'reset' })
+    actions.newTopic()
   }
 
   if (state.phase === 'pending' || state.phase === 'creating') {
@@ -220,10 +38,10 @@ export default function App() {
         {state.topic && <p className="topic">for &ldquo;{state.topic}&rdquo;</p>}
         <p className="error">{state.error || 'Something went wrong while generating your quiz.'}</p>
         <div className="failed-actions">
-          <button type="button" onClick={replaySameTopic}>
+          <button type="button" onClick={actions.replay}>
             Retry same topic
           </button>
-          <button type="button" className="secondary" onClick={newTopic}>
+          <button type="button" className="secondary" onClick={handleNewTopic}>
             New topic
           </button>
         </div>
@@ -232,11 +50,11 @@ export default function App() {
   }
 
   if (state.phase === 'finished') {
-    return <Results state={state} onReplay={replaySameTopic} onNewTopic={newTopic} />
+    return <Results state={state} onReplay={actions.replay} onNewTopic={handleNewTopic} />
   }
 
   if (state.phase === 'playing') {
-    return <Playing state={state} dispatch={dispatch} />
+    return <Playing state={state} actions={actions} />
   }
 
   return (
