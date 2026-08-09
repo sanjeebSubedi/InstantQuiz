@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def batch_questions(blueprint, first_batch_max=3, batch_max=4):
-    """Split blueprint into batches capped by question count.
+    """Split blueprint into batches capped by batch count.
 
     The first batch is kept small (first_batch_max) so the first results reach
     the user quickly; subsequent batches are capped at batch_max. A single
@@ -21,7 +21,9 @@ def batch_questions(blueprint, first_batch_max=3, batch_max=4):
     current = []
     remaining = first_batch_max
 
+    counter = 0
     for item in blueprint:
+        counter += 1
         count = int(item["question_count"])
         while count > 0:
             if remaining == 0:
@@ -29,7 +31,7 @@ def batch_questions(blueprint, first_batch_max=3, batch_max=4):
                 current = []
                 remaining = batch_max
             take = min(count, remaining)
-            current.append({**item, "question_count": take})
+            current.append({**item, "question_count": take, "section_index": counter})
             count -= take
             remaining -= take
 

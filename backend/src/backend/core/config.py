@@ -14,6 +14,7 @@ class Config(BaseSettings):
     OPENROUTER_API_KEY: str
     DEFAULT_DIFFICULTY: str = "medium"
     DEFAULT_QUESTION_COUNT: int = 10
+    QUIZ_DB_PATH: str = str(Path(__file__).resolve().parents[4] / "quiz.db")
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE, extra="ignore"

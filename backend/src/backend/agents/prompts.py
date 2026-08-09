@@ -129,9 +129,10 @@ Return ONLY valid JSON matching the provided schema.
 
 def build_batch_prompt(sections_with_meta):
     blocks = []
-    for i, item in enumerate(sections_with_meta, start=1):
+    for item in sections_with_meta:
+        index = item["section_index"]
         blocks.append(
-            f"""Section {i}:
+            f"""Section {index}:
 Article: {item["article_title"]}
 Breadcrumb: {item["section_breadcrumb"]}
 Difficulty: {item["difficulty"]}
@@ -153,7 +154,7 @@ For every section:
 - Use ONLY that section's reference material.
 - Generate exactly the requested number of questions.
 - Respect the requested difficulty.
-- Each generated question must include the correct section_index.
+- In every generated question, set section_index to the section number shown in its "Section N:" header.
 
 Sections
 
