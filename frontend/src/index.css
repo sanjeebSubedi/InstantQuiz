@@ -315,9 +315,11 @@ button.secondary:hover:not(:disabled) {
 .option:hover:not(:disabled) {
   background: #3c3836;
   border-color: var(--accent);
+  color: var(--text);
 }
 
-.option.selected {
+.option.selected,
+.option.selected:hover:not(:disabled) {
   border-color: var(--accent);
   background: rgba(131, 165, 152, 0.15);
   color: var(--accent);
