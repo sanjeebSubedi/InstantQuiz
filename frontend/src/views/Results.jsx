@@ -11,12 +11,16 @@ function ReviewRow({ question, answer, index }) {
         </span>
       </div>
       <p className="review-question">{question.question}</p>
-      <dl className="review-answers">
-        <dt>Your answer</dt>
-        <dd className={correct ? '' : 'wrong'}>{answer}</dd>
-        <dt>Correct answer</dt>
-        <dd className="right">{question.correct_answer}</dd>
-      </dl>
+      <div className="review-answers">
+        <div className="review-answer-col">
+          <span className="review-label">Your answer</span>
+          <span className={correct ? '' : 'wrong'}>{answer}</span>
+        </div>
+        <div className="review-answer-col">
+          <span className="review-label">Correct answer</span>
+          <span className="right">{question.correct_answer}</span>
+        </div>
+      </div>
       <a className="source-link" href={question.source_url} target="_blank" rel="noreferrer">
         Source article
       </a>
