@@ -22,3 +22,9 @@ quiz_outlines.db
 # Node frontend
 frontend/node_modules/
 frontend/dist/
+
+CONTEXT.md
+.scratch/
+docs/
+.pi/
+.issues/
