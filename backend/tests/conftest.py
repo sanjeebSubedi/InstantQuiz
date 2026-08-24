@@ -65,6 +65,8 @@ def harness(monkeypatch, tmp_path):
         quiz_service_module, "QdrantClient", lambda url=None: qdrant_client
     )
     monkeypatch.setattr(quiz_service_module, "WikipediaClient", FakeWikipediaClient)
+    # Background indexer builds its own clients; route them to the same fake.
+    monkeypatch.setattr(embed_module, "QdrantClient", lambda url=None: qdrant_client)
     monkeypatch.setattr(
         quiz_service_module, "get_llm_client", lambda *args, **kwargs: harness.llm
     )

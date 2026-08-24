@@ -102,9 +102,13 @@ class FakeLlmClient:
 
     def __init__(self):
         self.blueprint = BLUEPRINT
-        self._pending_batches = iter(batch_questions(BLUEPRINT))
         self.planner_calls = 0
         self.generator_calls = 0
+        # User prompts of generator calls, for asserting resolved section text.
+        self.generator_prompts = []
+
+    def set_blueprint(self, blueprint):
+        self.blueprint = blueprint
 
     def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
         if response_model == list[QuizOutline]:
@@ -113,7 +117,12 @@ class FakeLlmClient:
 
         assert response_model == list[QuestionsResponse]
         self.generator_calls += 1
-        batch = next(self._pending_batches)
+        self.generator_prompts.append(
+            next(m["content"] for m in messages if m["role"] == "user")
+        )
+        # Derived per call (wrapping across repeated runs on the same client).
+        batches = batch_questions(self.blueprint)
+        batch = batches[(self.generator_calls - 1) % len(batches)]
         questions = []
         counter = 0
         for item in batch:
