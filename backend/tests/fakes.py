@@ -5,7 +5,8 @@ touches: Wikipedia (HTTP), Qdrant + Gemini embeddings, and the OpenRouter
 LLM (instructor client). Everything runs locally with no network access.
 """
 
-from backend.agents.generator import batch_questions
+import re
+
 from backend.agents.models import QuestionsResponse, QuizOutline
 from backend.sources.wikipedia.client import WikipediaClient
 
@@ -92,12 +93,24 @@ class FakeWikipediaClient(WikipediaClient):
         return {"title": ARTICLE_TITLE, "content": WIKITEXT}
 
 
+# One prompt block per section: header line through its question count.
+SECTION_BLOCK_RE = re.compile(
+    r"Section (\d+):\n"
+    r"Article: .+\n"
+    r"Breadcrumb: (.+)\n"
+    r"Difficulty: .+\n"
+    r"Number of questions required: (\d+)"
+)
+
+
 class FakeLlmClient:
     """Stands in for the instructor-wrapped OpenRouter client.
 
     The planner call returns BLUEPRINT; each generator call answers exactly
-    the batch the real ``batch_questions`` split predicts, so shortfalls or
-    retries never trigger and question counts line up deterministically.
+    the sections requested in its user prompt, so shortfalls or retries never
+    trigger and question counts line up deterministically. Batches are read
+    from the prompt rather than a call counter so responses stay correct even
+    when generator batches execute concurrently.
     """
 
     def __init__(self):
@@ -110,6 +123,21 @@ class FakeLlmClient:
     def set_blueprint(self, blueprint):
         self.blueprint = blueprint
 
+    def _questions_for_prompt(self, prompt):
+        questions = []
+        for index, breadcrumb, count in SECTION_BLOCK_RE.findall(prompt):
+            for _ in range(int(count)):
+                questions.append(
+                    QuestionsResponse(
+                        section_index=int(index),
+                        question=f"Question about {breadcrumb}?",
+                        options=["A", "B", "C", "D"],
+                        correct_answer="A",
+                        explanation="deterministic fixture",
+                    )
+                )
+        return questions
+
     def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
         if response_model == list[QuizOutline]:
             self.planner_calls += 1
@@ -120,24 +148,7 @@ class FakeLlmClient:
         self.generator_prompts.append(
             next(m["content"] for m in messages if m["role"] == "user")
         )
-        # Derived per call (wrapping across repeated runs on the same client).
-        batches = batch_questions(self.blueprint)
-        batch = batches[(self.generator_calls - 1) % len(batches)]
-        questions = []
-        counter = 0
-        for item in batch:
-            for _ in range(int(item["question_count"])):
-                counter += 1
-                questions.append(
-                    QuestionsResponse(
-                        section_index=item["section_index"],
-                        question=f"Question {counter} about {item['section_breadcrumb']}?",
-                        options=[f"A{counter}", f"B{counter}", f"C{counter}", f"D{counter}"],
-                        correct_answer=f"A{counter}",
-                        explanation="deterministic fixture",
-                    )
-                )
-        return questions
+        return self._questions_for_prompt(self.generator_prompts[-1])
 
 
 def fake_get_embedding(client, text, emb_model="gemini-embedding-2"):

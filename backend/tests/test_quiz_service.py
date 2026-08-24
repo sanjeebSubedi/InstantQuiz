@@ -1,9 +1,13 @@
 import logging
+import threading
+
+from backend.agents.models import QuestionsResponse
 
 from tests.fakes import (
     ARTICLE_TITLE,
     QUESTION_KEYS,
     TOPIC,
+    FakeLlmClient,
     FakeWikipediaClient,
 )
 
@@ -115,6 +119,96 @@ def test_split_section_chunks_are_concatenated_for_generation(harness, monkeypat
         for batch in batches
         for question in batch
     )
+
+
+class OutOfOrderLlmClient(FakeLlmClient):
+    """Holds the History batch open until the Climbing routes batch starts.
+
+    Forces tail batches to finish out of order (Climbing routes first) so the
+    service's on_batch delivery order can be checked independently of LLM
+    completion order.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.climbing_batch_started = threading.Event()
+        # Section completion order, appended when each generator call returns.
+        self.completion_order = []
+
+    def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
+        if response_model == list[QuestionsResponse]:
+            prompt = next(m["content"] for m in messages if m["role"] == "user")
+            if "Breadcrumb: History" in prompt:
+                assert self.climbing_batch_started.wait(timeout=5), (
+                    "History batch ran alone; tail batches are not concurrent"
+                )
+                self.completion_order.append("history")
+            elif "Breadcrumb: Climbing routes" in prompt:
+                self.climbing_batch_started.set()
+                self.completion_order.append("climbing routes")
+        return super().create(
+            messages=messages,
+            response_model=response_model,
+            extra_body=extra_body,
+            **kwargs,
+        )
+
+
+def test_tail_batches_run_concurrently_but_persist_in_batch_order(
+    harness, monkeypatch
+):
+    from backend.services import quiz_service as quiz_service_module
+
+    llm = OutOfOrderLlmClient()
+    monkeypatch.setattr(quiz_service_module, "get_llm_client", lambda *a, **k: llm)
+
+    result, batches = harness.run_service()
+
+    # Climbing routes finished before History, yet batches were persisted 1,2,3.
+    assert llm.completion_order == ["climbing routes", "history"]
+    assert [len(batch) for batch in batches] == [3, 4, 3]
+    assert [{q["section_index"] for q in batch} for batch in batches] == [
+        {1},
+        {2},
+        {3},
+    ]
+    assert result["question_count"] == 10
+
+
+def test_tail_batch_failure_yields_partial_quiz(harness, monkeypatch, caplog):
+    """A hard failure in one tail batch must not fail the whole job."""
+    import logging
+
+    from backend.services import quiz_service as quiz_service_module
+
+    class FailingTailLlmClient(FakeLlmClient):
+        def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
+            if response_model == list[QuestionsResponse]:
+                prompt = next(
+                    m["content"] for m in messages if m["role"] == "user"
+                )
+                if "Breadcrumb: History" in prompt:
+                    raise RuntimeError("provider outage")
+            return super().create(
+                messages=messages,
+                response_model=response_model,
+                extra_body=extra_body,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(
+        quiz_service_module, "get_llm_client", lambda *a, **k: FailingTailLlmClient()
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result, batches = harness.run_service()
+
+    # History (batch 2, 4q) is lost; eager batch 1 and tail batch 3 still stream.
+    assert result["question_count"] == 6
+    assert [len(batch) for batch in batches] == [3, 3]
+    assert [{q["section_index"] for q in batch} for batch in batches] == [{1}, {3}]
+    assert any("Batch 2/3" in message for message in caplog.messages)
+    assert any("Planned 10 questions but generated 6" in message for message in caplog.messages)
 
 
 def test_missing_breadcrumb_is_skipped_with_shortfall_warning(harness, caplog):
