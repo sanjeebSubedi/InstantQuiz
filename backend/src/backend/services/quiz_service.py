@@ -79,20 +79,38 @@ def generate_quiz_for_topic(
     wikipedia_client = WikipediaClient()
 
     article = wikipedia_client.resolve_topic_to_article(topic)
+    fetch_done = perf_counter()
+
     article_title = article.get("title", "")
     sections = wikipedia_client.parse_sections(article.get("content", ""))
-
     chunks = build_chunks(sections, article_title)
+    chunk_done = perf_counter()
+
     qdrant_collection_name = f"{config.QDRANT_COLLECTION_PREFIX}-{slugify_title(article_title)}"
     spawn_background_indexing(qdrant_collection_name, chunks)
 
     outline = build_outline(chunks, article_title)
+    outline_done = perf_counter()
 
     llm_client = get_llm_client()
     planned = plan_quiz(llm_client, outline, topic, difficulty, question_count)
-    blueprint = resolve_chunks_locally(chunks, planned)
+    plan_done = perf_counter()
 
-    logger.info("Planning done in %.2fs", perf_counter() - start)
+    blueprint = resolve_chunks_locally(chunks, planned)
+    resolve_done = perf_counter()
+
+    logger.info("Planning done in %.2fs", plan_done - start)
+    logger.info(
+        "Stage timings: wikipedia fetch=%.2fs parse+chunk=%.2fs outline=%.2fs "
+        "plan=%.2fs local resolve=%.2fs (chunks=%d planned_sections=%d)",
+        fetch_done - start,
+        chunk_done - fetch_done,
+        outline_done - chunk_done,
+        plan_done - outline_done,
+        resolve_done - plan_done,
+        len(chunks),
+        len(planned),
+    )
 
     source_by_index = {
         index: item["source_url"]
@@ -121,6 +139,7 @@ def generate_quiz_for_topic(
 
     if generated == 0:
         raise RuntimeError(f"Generated no questions for topic '{topic}'")
+    shortfall = max(question_count - generated, 0)
     if generated != question_count:
         logger.warning(
             "Planned %d questions but generated %d",
@@ -128,10 +147,12 @@ def generate_quiz_for_topic(
             generated,
         )
     logger.info(
-        "Pipeline finished: %d questions for '%s' in %.2fs",
+        "Pipeline finished: %d questions for '%s' total=%.2fs "
+        "(shortfall=%d)",
         generated,
         article_title,
         perf_counter() - start,
+        shortfall,
     )
 
     return {

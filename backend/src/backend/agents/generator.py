@@ -49,13 +49,15 @@ def batch_questions(blueprint, first_batch_max=3, batch_max=4):
     return batches
 
 
-def _generate_batch(llm_client, batch, index, total_batches, max_retries):
+def _generate_batch(llm_client, batch, index, total_batches, max_retries, stats=None):
     """Generate one batch, retrying short responses and provider errors.
 
     After the final attempt a non-empty partial result is returned so callers
     surface the shortfall; a batch left with nothing re-raises the last error
     so its position decides the outcome (an eager first-batch failure fails
     the job, a tail failure forfeits only that batch).
+
+    ``stats`` optionally accumulates LLM call and retry counts across batches.
     """
     required = sum(int(item["question_count"]) for item in batch)
     logger.info(
@@ -70,6 +72,10 @@ def _generate_batch(llm_client, batch, index, total_batches, max_retries):
     attempts = 0
     while len(response) < required and attempts <= max_retries:
         attempts += 1
+        if stats is not None:
+            stats["calls"] += 1
+            if attempts > 1:
+                stats["retries"] += 1
         try:
             start = perf_counter()
             with _provider_call_slots:
@@ -130,12 +136,25 @@ def generate_quiz(llm_client, blueprint, max_retries=2):
     if not batches:
         return
 
+    stats = {"calls": 0, "retries": 0}
+
     # The first batch is awaited here so time-to-first-question is unchanged.
-    yield _generate_batch(llm_client, batches[0], 1, total_batches, max_retries)
+    first_start = perf_counter()
+    first = _generate_batch(llm_client, batches[0], 1, total_batches, max_retries, stats)
+    logger.info(
+        "Stage 'first batch' (1/%d) finished in %.2fs",
+        total_batches,
+        perf_counter() - first_start,
+    )
+    yield first
 
     if total_batches == 1:
         return
 
+    tail_start = perf_counter()
+    # One stats dict per batch so pool threads never mutate shared state;
+    # they are folded into the totals once every future has been consumed.
+    tail_stats = [{"calls": 0, "retries": 0} for _ in range(total_batches - 1)]
     with ThreadPoolExecutor(max_workers=TAIL_MAX_WORKERS) as executor:
         # Each future owns its retry loop; siblings are never cancelled or
         # blocked, so one batch failing hard only forfeits its own questions.
@@ -147,6 +166,7 @@ def generate_quiz(llm_client, blueprint, max_retries=2):
                 position,
                 total_batches,
                 max_retries,
+                tail_stats[position - 2],
             )
             for position, batch in enumerate(batches[1:], start=2)
         ]
@@ -159,3 +179,17 @@ def generate_quiz(llm_client, blueprint, max_retries=2):
                     position,
                     total_batches,
                 )
+    logger.info(
+        "Stage 'tail batches' (%d batches) finished in %.2fs",
+        total_batches - 1,
+        perf_counter() - tail_start,
+    )
+    for extra in tail_stats:
+        stats["calls"] += extra["calls"]
+        stats["retries"] += extra["retries"]
+    logger.info(
+        "Generation summary: %d LLM calls (%d retries) across %d batches",
+        stats["calls"],
+        stats["retries"],
+        total_batches,
+    )

@@ -94,8 +94,14 @@ def run_background_indexing(collection_name, chunks):
     Nothing raises on the thread: the quiz job that spawned indexing generates
     from its local chunks regardless.
     """
+    started = perf_counter()
     try:
         _index_chunks(collection_name, chunks)
+        logger.info(
+            "Background index of '%s' completed in %.2fs",
+            collection_name,
+            perf_counter() - started,
+        )
         return
     except Exception:
         logger.exception(
@@ -105,9 +111,18 @@ def run_background_indexing(collection_name, chunks):
     time.sleep(INDEXING_RETRY_BACKOFF_SECONDS)
     try:
         _index_chunks(collection_name, chunks)
+        logger.info(
+            "Background index of '%s' completed in %.2fs (after 1 retry)",
+            collection_name,
+            perf_counter() - started,
+        )
         return
     except Exception:
-        logger.exception("Background indexing of '%s' failed terminally", collection_name)
+        logger.exception(
+            "Background indexing of '%s' failed terminally after %.2fs",
+            collection_name,
+            perf_counter() - started,
+        )
 
     _cleanup_failed_collection(collection_name)
 
