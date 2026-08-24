@@ -9,7 +9,6 @@ dependencies = [
     "fastapi>=0.139.0",
     "google-genai>=2.11.0",
     "instructor>=1.15.4",
-    "jupyter>=1.1.1",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "qdrant-client>=1.18.0",
@@ -24,6 +23,7 @@ backend = "backend:main"
 [dependency-groups]
 dev = [
     "httpx>=0.28.0",
+    "jupyter>=1.1.1",
     "pytest>=9.0.0",
 ]
 

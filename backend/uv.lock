@@ -247,7 +247,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-genai" },
     { name = "instructor" },
-    { name = "jupyter" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "qdrant-client" },
@@ -259,6 +258,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "jupyter" },
     { name = "pytest" },
 ]
 
@@ -267,7 +267,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "google-genai", specifier = ">=2.11.0" },
     { name = "instructor", specifier = ">=1.15.4" },
-    { name = "jupyter", specifier = ">=1.1.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "qdrant-client", specifier = ">=1.18.0" },
@@ -279,6 +278,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "jupyter", specifier = ">=1.1.1" },
     { name = "pytest", specifier = ">=9.0.0" },
 ]
 
