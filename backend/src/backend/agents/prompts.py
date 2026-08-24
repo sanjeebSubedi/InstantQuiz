@@ -101,6 +101,9 @@ A good question:
 - has exactly one clearly correct answer
 - avoids unnecessary wording
 - can be answered entirely from the provided section
+- is fully self-contained: it never refers to the source material itself
+
+Never mention the source material in a question or option. Forbidden phrasings include "according to the passage", "from the passage", "in the passage", "the passage states", "per the text", "in this section", and any synonym or paraphrase of these. Write each question so it makes sense even if the reader has not seen the passage.
 
 Avoid:
 
