@@ -101,6 +101,11 @@ def generate_quiz_for_topic(
 
     generated = 0
     for batch in generate_quiz(llm_client, blueprint):
+        unmapped = {q.section_index for q in batch} - source_by_index.keys()
+        if unmapped:
+            logger.warning(
+                "No source URL mapped for section_index %s", sorted(unmapped)
+            )
         api_batch = [
             {
                 "section_index": q.section_index,
@@ -114,6 +119,8 @@ def generate_quiz_for_topic(
         on_batch(api_batch)
         generated += len(api_batch)
 
+    if generated == 0:
+        raise RuntimeError(f"Generated no questions for topic '{topic}'")
     if generated != question_count:
         logger.warning(
             "Planned %d questions but generated %d",

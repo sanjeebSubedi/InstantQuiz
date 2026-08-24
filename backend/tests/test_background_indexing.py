@@ -1,10 +1,18 @@
+import logging
 import threading
 import time
 
 from backend.core.config import config
-from backend.ingestion.embed import SENTINEL_POINT_ID, read_index_status
+from backend.ingestion.chunking import build_chunks
+from backend.ingestion.embed import (
+    SENTINEL_POINT_ID,
+    create_collection,
+    mark_index_status,
+    read_index_status,
+    run_background_indexing,
+)
 from backend.services.quiz_service import slugify_title
-from tests.fakes import ARTICLE_TITLE, TOPIC, fake_get_embedding
+from tests.fakes import ARTICLE_TITLE, TOPIC, FakeWikipediaClient, fake_get_embedding
 
 
 def collection_name():
@@ -123,6 +131,96 @@ def test_concurrent_request_while_indexing_does_not_spawn_second_indexer(
         time.sleep(0.01)
     assert len(embed_texts) == 4
     assert wait_for_status(harness.qdrant_client, name, "ready") == "ready"
+
+
+def make_chunks():
+    wiki = FakeWikipediaClient()
+    article = wiki.resolve_topic_to_article(TOPIC)
+    sections = wiki.parse_sections(article["content"])
+    return build_chunks(sections, ARTICLE_TITLE)
+
+
+def prepare_indexing_collection(qdrant_client, name, chunks):
+    """Recreate what spawn_background_indexing does before spawning."""
+    create_collection(qdrant_client, name)
+    mark_index_status(qdrant_client, name, "indexing", chunk_count=len(chunks))
+
+
+def test_indexing_failure_is_retried_once(harness, monkeypatch, caplog):
+    from backend.ingestion import embed as embed_module
+
+    monkeypatch.setattr(embed_module, "INDEXING_RETRY_BACKOFF_SECONDS", 0)
+    embed_calls = []
+
+    def flaky_get_embedding(client, text, emb_model="gemini-embedding-2"):
+        embed_calls.append(text)
+        if len(embed_calls) == 1:
+            raise RuntimeError("gemini 429")
+        return fake_get_embedding(client, text)
+
+    monkeypatch.setattr(embed_module, "get_embedding", flaky_get_embedding)
+
+    chunks = make_chunks()
+    name = collection_name()
+    prepare_indexing_collection(harness.qdrant_client, name, chunks)
+
+    with caplog.at_level(logging.WARNING):
+        run_background_indexing(name, chunks)
+
+    # The first pass died early; a full second pass completed the indexing.
+    assert len(embed_calls) > len(chunks)
+    assert read_index_status(harness.qdrant_client, name) == "ready"
+    assert any("retrying" in message for message in caplog.messages)
+
+
+def test_terminal_failure_deletes_failed_collection(harness, monkeypatch):
+    from backend.ingestion import embed as embed_module
+
+    monkeypatch.setattr(embed_module, "INDEXING_RETRY_BACKOFF_SECONDS", 0)
+    embed_calls = []
+
+    def dead_get_embedding(client, text, emb_model="gemini-embedding-2"):
+        embed_calls.append(text)
+        raise RuntimeError("gemini down")
+
+    monkeypatch.setattr(embed_module, "get_embedding", dead_get_embedding)
+
+    chunks = make_chunks()
+    name = collection_name()
+    prepare_indexing_collection(harness.qdrant_client, name, chunks)
+
+    run_background_indexing(name, chunks)
+
+    # Exactly one retry, then the collection is removed for a clean cold start.
+    assert len(embed_calls) == 2
+    assert read_index_status(harness.qdrant_client, name) == "absent"
+    assert not harness.qdrant_client.collection_exists(name)
+
+
+def test_failed_collection_survives_concurrent_flip_to_ready(harness, monkeypatch):
+    from backend.ingestion import embed as embed_module
+
+    monkeypatch.setattr(embed_module, "INDEXING_RETRY_BACKOFF_SECONDS", 0)
+
+    def dead_get_embedding(client, text, emb_model="gemini-embedding-2"):
+        raise RuntimeError("gemini down")
+
+    monkeypatch.setattr(embed_module, "get_embedding", dead_get_embedding)
+
+    def ready_read(qdrant_client, collection_name):
+        return "ready"
+
+    monkeypatch.setattr(embed_module, "read_index_status", ready_read)
+
+    chunks = make_chunks()
+    name = collection_name()
+    prepare_indexing_collection(harness.qdrant_client, name, chunks)
+
+    run_background_indexing(name, chunks)
+
+    # Another indexer flipped the marker between our failed-mark and the
+    # re-read, so deletion is skipped and the ready collection survives.
+    assert harness.qdrant_client.collection_exists(name)
 
 
 def test_existing_collection_is_not_reindexed(harness, monkeypatch):

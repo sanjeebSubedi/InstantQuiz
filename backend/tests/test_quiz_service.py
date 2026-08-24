@@ -1,6 +1,8 @@
 import logging
 import threading
 
+import pytest
+
 from backend.agents.models import QuestionsResponse
 
 from tests.fakes import (
@@ -209,6 +211,105 @@ def test_tail_batch_failure_yields_partial_quiz(harness, monkeypatch, caplog):
     assert [{q["section_index"] for q in batch} for batch in batches] == [{1}, {3}]
     assert any("Batch 2/3" in message for message in caplog.messages)
     assert any("Planned 10 questions but generated 6" in message for message in caplog.messages)
+
+
+def test_eager_first_batch_total_failure_fails_job(harness, monkeypatch):
+    """The eager batch retries to exhaustion, then its failure fails the job."""
+    from backend.services import quiz_service as quiz_service_module
+
+    class EagerFailureLlmClient(FakeLlmClient):
+        def __init__(self):
+            super().__init__()
+            self.introduction_attempts = 0
+
+        def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
+            if response_model == list[QuestionsResponse]:
+                prompt = next(m["content"] for m in messages if m["role"] == "user")
+                if "Breadcrumb: Introduction" in prompt:
+                    self.introduction_attempts += 1
+                    raise RuntimeError("provider outage")
+            return super().create(
+                messages=messages,
+                response_model=response_model,
+                extra_body=extra_body,
+                **kwargs,
+            )
+
+    llm = EagerFailureLlmClient()
+    monkeypatch.setattr(quiz_service_module, "get_llm_client", lambda *a, **k: llm)
+
+    with pytest.raises(RuntimeError, match="provider outage"):
+        harness.run_service()
+
+    # Every retry is spent on the eager batch before the job gives up.
+    assert llm.introduction_attempts == 3
+
+
+def test_partial_batch_survives_later_hard_failures(harness, monkeypatch, caplog):
+    """A batch that produced some questions keeps them even when its remaining
+    retries raise; the job completes with the shortfall."""
+    from backend.services import quiz_service as quiz_service_module
+
+    class PartialThenFailingLlmClient(FakeLlmClient):
+        def __init__(self):
+            super().__init__()
+            self.history_attempts = 0
+
+        def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
+            if response_model == list[QuestionsResponse]:
+                prompt = next(m["content"] for m in messages if m["role"] == "user")
+                if "Breadcrumb: History" in prompt:
+                    self.history_attempts += 1
+                    if self.history_attempts == 1:
+                        # First attempt delivers only half the batch.
+                        return self._questions_for_prompt(prompt)[:2]
+                    raise RuntimeError("provider outage")
+            return super().create(
+                messages=messages,
+                response_model=response_model,
+                extra_body=extra_body,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(
+        quiz_service_module,
+        "get_llm_client",
+        lambda *a, **k: PartialThenFailingLlmClient(),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result, batches = harness.run_service()
+
+    # History's two early questions are kept; its final two are forfeited.
+    assert result["question_count"] == 8
+    assert [len(batch) for batch in batches] == [3, 2, 3]
+    assert any("Batch 2/3 shortfall" in message for message in caplog.messages)
+    assert any(
+        "Planned 10 questions but generated 8" in message
+        for message in caplog.messages
+    )
+
+
+def test_zero_total_questions_fails_the_job(harness, monkeypatch):
+    from backend.services import quiz_service as quiz_service_module
+
+    class EmptyLlmClient(FakeLlmClient):
+        def create(self, messages=None, response_model=None, extra_body=None, **kwargs):
+            if response_model == list[QuestionsResponse]:
+                return []
+            return super().create(
+                messages=messages,
+                response_model=response_model,
+                extra_body=extra_body,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(
+        quiz_service_module, "get_llm_client", lambda *a, **k: EmptyLlmClient()
+    )
+
+    with pytest.raises(RuntimeError, match="no questions"):
+        harness.run_service()
 
 
 def test_missing_breadcrumb_is_skipped_with_shortfall_warning(harness, caplog):
