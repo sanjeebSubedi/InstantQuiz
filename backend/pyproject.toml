@@ -21,6 +21,15 @@ dependencies = [
 [project.scripts]
 backend = "backend:main"
 
+[dependency-groups]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=9.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["uv_build>=0.11.17,<0.12.0"]
 build-backend = "uv_build"

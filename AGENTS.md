@@ -28,7 +28,7 @@ cd frontend && npm run dev
 cd frontend && npm test
 ```
 
-There are no backend tests, lint, formatter, or typecheck commands configured.
+Backend tests live in `backend/tests/` and run with `cd backend && uv run pytest`. There are no lint, formatter, or typecheck commands configured.
 
 ## Coding rules
 
