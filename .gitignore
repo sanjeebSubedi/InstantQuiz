@@ -11,6 +11,10 @@ wheels/
 .vscode/
 .env
 .python-version
+
+# Agent config and working files
+AGENTS.md
+improvements.md
 .agents/
 opencode.json
 
@@ -27,4 +31,5 @@ CONTEXT.md
 .scratch/
 docs/
 .pi/
-.issues/
+issues/
+specs/
