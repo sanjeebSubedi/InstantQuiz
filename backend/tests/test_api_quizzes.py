@@ -66,3 +66,33 @@ def test_failed_job_surfaces_error(harness, monkeypatch):
 
     assert final["status"] == "failed"
     assert "planner exploded" in final["error"]
+
+
+def test_cors_preflight_allows_configured_origin(harness, monkeypatch):
+    from backend.core.config import config
+
+    monkeypatch.setattr(config, "CORS_ORIGINS", "http://localhost:5173")
+    with harness.api_client() as client:
+        response = client.options(
+            "/api/quizzes/some-job",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_cors_rejects_unconfigured_origin(harness, monkeypatch):
+    from backend.core.config import config
+
+    monkeypatch.setattr(config, "CORS_ORIGINS", "http://localhost:5173")
+    with harness.api_client() as client:
+        response = client.get(
+            "/api/quizzes/does-not-exist", headers={"Origin": "http://evil.example"}
+        )
+
+    assert response.status_code == 404
+    assert "access-control-allow-origin" not in response.headers

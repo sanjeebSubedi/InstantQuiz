@@ -1,4 +1,8 @@
-const QUIZZES_URL = '/api/quizzes'
+// Base URL of the quiz backend; empty means same-origin (Vite dev proxy).
+// Set at build time via VITE_API_BASE_URL when the backend lives on another origin.
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+
+const QUIZZES_URL = `${API_BASE}/api/quizzes`
 
 async function request(url, options) {
   const res = await fetch(url, options)
