@@ -6,8 +6,9 @@ The backend uses Gemini to create embeddings and Qdrant as its vector database. 
 
 ## Demo
 
-https://github.com/sanjeebSubedi/InstantQuiz/releases/download/v0.1.0/demo_video.mp4
-
+[https://github.com/sanjeebSubedi/InstantQuiz/releases/download/v0.1.0/demo_video.mp4
+](https://github.com/user-attachments/assets/78eae0a5-a015-43b9-be4e-7719319a276d
+)
 ## How it works
 
 1. The backend finds a Wikipedia article for the topic.
